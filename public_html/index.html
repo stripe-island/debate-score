@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ディベート大会結果管理システム</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<script src="settings.js"></script>
+<script>
+
+	window.addEventListener("load", function ()
+	{
+		if (window.sessionStorage.getItem("token") == null)
+		{
+			var popup = document.createElement("section");
+			popup.setAttribute("class", "popup");
+			popup.innerHTML = '\
+				<h2>ログインしてください</h2>\
+				<p>氏名</p>\
+				<input id="name" type="text">\
+				<p>パスワード</p>\
+				<input id="password" type="password">';
+
+			var button = document.createElement("input");
+			button.setAttribute("type", "button");
+			button.setAttribute("value", "ログイン");
+			button.addEventListener("click", function ()
+			{
+				var name = document.getElementById("name").value;
+				if (name === "")
+				{
+					message.setAttribute("class", "error");
+					message.textContent = "氏名を入力してください";
+					return;
+				}
+
+				var password = document.getElementById("password").value;
+				if (password === "")
+				{
+					message.setAttribute("class", "error");
+					message.textContent = "パスワードを入力してください";
+					return;
+				}
+
+				button.disabled = true;
+				message.removeAttribute("class");
+				message.textContent = "ログインしています...";
+
+				var token = window.btoa(unescape(encodeURIComponent(name + "/" + password)));
+				window.sessionStorage.setItem("token", "Bearer " + token);
+
+				showEventList(function (statusCode)
+				{
+					if (statusCode === 200)
+					{
+						document.body.removeChild(popup);
+					}
+					else
+					{
+						button.disabled = false;
+						message.setAttribute("class", "error");
+						message.textContent = "氏名、又はパスワードが違います";
+
+						window.sessionStorage.clear();
+					}
+				});
+			});
+			popup.appendChild(button);
+
+			var message = document.createElement("p");
+			popup.appendChild(message);
+
+			document.body.appendChild(popup);
+			return;
+		}
+
+		if (window.sessionStorage.getItem("eventId") == null)
+		{
+			showEventList();
+		}
+		else
+		{
+			showEvent();
+
+			var button = document.createElement("div");
+			button.setAttribute("class", "button");
+			button.addEventListener("click", function ()
+			{
+				showTeamList();
+			});
+			button.innerHTML = '<img src="icon.png" alt="" width="36" height="36">';
+			document.body.appendChild(button);
+		}
+	});
+
+	function showEventList(callback)
+	{
+		var xhr = new XMLHttpRequest();
+		xhr.addEventListener("loadend", function ()
+		{
+			switch(xhr.status)
+			{
+				case 200:
+					document.getElementsByTagName("h1").item(0).textContent = "大会を選択してください";
+
+					var events = JSON.parse(xhr.responseText);
+					events.forEach(function (event, index, array)
+					{
+						var section = document.createElement("section");
+						section.setAttribute("class", "lv1");
+						section.addEventListener("click", function ()
+						{
+							document.getElementsByTagName("h1").item(0).textContent = event.name;
+
+							window.sessionStorage.setItem("eventId", event.id.toString());
+
+							showEvent();
+
+							var button = document.createElement("div");
+							button.setAttribute("class", "button");
+							button.addEventListener("click", function ()
+							{
+								showTeamList();
+							});
+							button.innerHTML = '<img src="icon.png" alt="" width="36" height="36">';
+							document.body.appendChild(button);
+						});
+
+						var title = document.createElement("h2");
+						title.textContent = event.name;
+						section.appendChild(title);
+
+						var date = document.createElement("p");
+						if (event.startDate == null)
+						{
+							date.textContent = "開催日未設定";
+						}
+						else {
+							var yyyyMMdd = event.startDate.toString();
+							date.textContent += yyyyMMdd.substring(0, 4) + "年";
+							date.textContent += yyyyMMdd.substring(4, 6) + "月";
+							date.textContent += yyyyMMdd.substring(6, 8) + "日";
+
+							if (event.startDate !== event.endDate)
+							{
+								yyyyMMdd = event.endDate.toString();
+								date.textContent += "～";
+								date.textContent += yyyyMMdd.substring(6, 8) + "日";
+							}
+						}
+						section.appendChild(date);
+
+						document.body.appendChild(section);
+					});
+					break;
+			}
+
+			if (callback != null)
+			{
+				callback(xhr.status);
+			}
+		});
+		xhr.open("GET", API_URL);
+		xhr.setRequestHeader("Authorization", window.sessionStorage.getItem("token"));
+		xhr.send(null);
+	}
+
+	function showEvent(callback)
+	{
+		var sections = document.querySelectorAll("body > section:not(.popup)");
+		sections.forEach(function (section, index, array)
+		{
+			document.body.removeChild(section);
+		});
+
+		var xhr = new XMLHttpRequest();
+		xhr.addEventListener("loadend", function ()
+		{
+			switch (xhr.status)
+			{
+				case 200:
+					var event = JSON.parse(xhr.responseText);
+					document.getElementsByTagName("h1").item(0).textContent = event.name;
+
+					var teams = new Map();
+					event.teams.forEach(function (team, index, array)
+					{
+						teams.set(team.id.toString(), team.name);
+					});
+
+					event.schedules.forEach(function (schedule, index, array)
+					{
+						var section = document.createElement("section");
+						section.setAttribute("class", "lv1");
+
+						var title = document.createElement("h2");
+						title.textContent = schedule.name;
+						section.appendChild(title);
+
+						var date = document.createElement("p");
+						var yyyyMMddhhmm = schedule.startDate.toString();
+						date.textContent += yyyyMMddhhmm.substring(4, 6) + "月";
+						date.textContent += yyyyMMddhhmm.substring(6, 8) + "日 ";
+						date.textContent += yyyyMMddhhmm.substring(8, 10) + ":";
+						date.textContent += yyyyMMddhhmm.substring(10, 12) + " 開始";
+						section.appendChild(date);
+
+						var div = document.createElement("div");
+
+						schedule.games.forEach(function (game, index, array)
+						{
+							var childSection = document.createElement("section");
+							childSection.setAttribute("class", "lv2");
+							childSection.addEventListener("click", function ()
+							{
+								showGame(game.id, schedule.name);
+							});
+
+							var childTitle = document.createElement("h2");
+							childTitle.textContent = game.roomName;
+							childSection.appendChild(childTitle);
+
+							var table = document.createElement("table");
+							table.setAttribute("class", "game");
+							var affirmativeRow = table.insertRow(-1);
+							affirmativeRow.insertCell(-1).textContent = "肯定";
+							affirmativeRow.insertCell(-1).textContent = teams.get(game.affirmativeTeamId.toString());
+							if (game.affirmativeVote != null)
+							{
+								affirmativeRow.insertCell(-1).textContent = game.affirmativeVote.toString();
+								affirmativeRow.insertCell(-1).textContent = "(" + game.affirmativeCommPoint.toString() + ")";
+							}
+							else
+							{
+								affirmativeRow.insertCell(-1).textContent = "－";
+								affirmativeRow.insertCell(-1).textContent = "(－)";
+							}
+							var negativeRow = table.insertRow(-1);
+							negativeRow.insertCell(-1).textContent = "否定";
+							negativeRow.insertCell(-1).textContent = teams.get(game.negativeTeamId.toString());
+							if (game.negativeVote != null)
+							{
+								negativeRow.insertCell(-1).textContent = game.negativeVote.toString();
+								negativeRow.insertCell(-1).textContent = "(" + game.negativeCommPoint.toString() + ")";
+							}
+							else
+							{
+								negativeRow.insertCell(-1).textContent = "－";
+								negativeRow.insertCell(-1).textContent = "(－)";
+							}
+							childSection.appendChild(table);
+
+							div.appendChild(childSection);
+						});
+
+						section.appendChild(div);
+
+						document.body.appendChild(section);
+					});
+					break;
+			}
+
+			if (callback != null)
+			{
+				callback();
+			}
+		});
+		xhr.open("GET", API_URL + "/" + window.sessionStorage.getItem("eventId"));
+		xhr.setRequestHeader("Authorization", window.sessionStorage.getItem("token"));
+		xhr.send(null);
+	}
+
+	function showTeamList()
+	{
+		if (document.getElementsByClassName("popup").length > 0)
+		{
+			return;
+		}
+
+		var popup = document.createElement("section");
+		popup.setAttribute("class", "popup");
+
+		var title = document.createElement("h2");
+		title.textContent = "出場校一覧（ランキング順）";
+		popup.appendChild(title);
+
+		var loading = document.createElement("p");
+		loading.textContent = "読み込み中...";
+		popup.appendChild(loading);
+
+		document.body.appendChild(popup);
+
+		var xhr = new XMLHttpRequest();
+		xhr.addEventListener("loadend", function ()
+		{
+			switch(xhr.status)
+			{
+				case 200:
+					popup.removeChild(loading);
+
+					var teams = JSON.parse(xhr.responseText);
+
+					var juniorSection = document.createElement("section");
+					juniorSection.setAttribute("class", "lv1");
+
+					var juniorTitle = document.createElement("h2");
+					juniorTitle.textContent = "中学の部";
+					juniorSection.appendChild(juniorTitle);
+
+					popup.appendChild(juniorSection);
+
+					var seniorSection = document.createElement("section");
+					seniorSection.setAttribute("class", "lv1");
+
+					var seniorTitle = document.createElement("h2");
+					seniorTitle.textContent = "高校の部";
+					seniorSection.appendChild(seniorTitle);
+
+					popup.appendChild(seniorSection);
+
+					teams.forEach(function (team, index, array)
+					{
+						var childSection = document.createElement("section");
+						childSection.setAttribute("class", "lv2");
+
+						var childTitle = document.createElement("h2");
+						childTitle.textContent = team.name;
+						childSection.appendChild(childTitle);
+
+						var table = document.createElement("table");
+						table.setAttribute("class", "team");
+						var headerRow = table.insertRow(-1);
+						headerRow.insertCell(-1).textContent = "試合数";
+						headerRow.insertCell(-1).textContent = "終了数";
+						headerRow.insertCell(-1).textContent = "勝利数";
+						headerRow.insertCell(-1).textContent = "得票数";
+						headerRow.insertCell(-1).textContent = "コミ点";
+						var dataRow = table.insertRow(-1);
+						dataRow.insertCell(-1).textContent = team.gameCount.toString();
+						dataRow.insertCell(-1).textContent = team.doneCount.toString();
+						dataRow.insertCell(-1).textContent = team.winCount.toString();
+						dataRow.insertCell(-1).textContent = team.vote.toString();
+						dataRow.insertCell(-1).textContent = team.commPoint.toString();
+						childSection.appendChild(table);
+
+						if (team.classId === 1)
+						{
+							juniorSection.appendChild(childSection);
+						}
+						else
+						{
+							seniorSection.appendChild(childSection);
+						}
+					});
+
+					var close = document.createElement("p");
+					close.setAttribute("class", "operation");
+					close.textContent = "✕　閉じる　";
+					close.addEventListener("click", function ()
+					{
+						document.body.removeChild(popup);
+					});
+					popup.appendChild(close);
+					break;
+			}
+		});
+		xhr.open("GET", API_URL + "/" + window.sessionStorage.getItem("eventId") + "/teams?sort=-wincount,-vote,-commpoint,-donecount");
+		xhr.setRequestHeader("Authorization", window.sessionStorage.getItem("token"));
+		xhr.send(null);
+	}
+
+	function showGame(gameId, scheduleName)
+	{
+		if (document.getElementsByClassName("popup").length > 0)
+		{
+			return;
+		}
+
+		var popup = document.createElement("section");
+		popup.setAttribute("class", "popup");
+
+		var title = document.createElement("h2");
+		title.textContent = scheduleName;
+		popup.appendChild(title);
+
+		var loading = document.createElement("p");
+		loading.textContent = "読み込み中...";
+		popup.appendChild(loading);
+
+		document.body.appendChild(popup);
+
+		var xhr = new XMLHttpRequest();
+		xhr.addEventListener("loadend", function ()
+		{
+			switch(xhr.status)
+			{
+				case 200:
+					var game = JSON.parse(xhr.responseText);
+
+					var section = document.createElement("section");
+					section.setAttribute("class", "lv2");
+
+					var title = document.createElement("h2");
+					title.textContent = game.roomName;
+					section.appendChild(title);
+
+					var table = document.createElement("table");
+					table.setAttribute("class", "game");
+					var affirmativeRow = table.insertRow(-1);
+					affirmativeRow.insertCell(-1).textContent = "肯定";
+					affirmativeRow.insertCell(-1).textContent = game.affirmativeTeamName;
+					affirmativeRow.insertCell(-1).setAttribute("id", "affirmativeVote");
+					affirmativeRow.insertCell(-1).setAttribute("id", "affirmativeCommPoint");
+					var negativeRow = table.insertRow(-1);
+					negativeRow.insertCell(-1).textContent = "否定";
+					negativeRow.insertCell(-1).textContent = game.negativeTeamName;
+					negativeRow.insertCell(-1).setAttribute("id", "negativeVote");
+					negativeRow.insertCell(-1).setAttribute("id", "negativeCommPoint");
+					section.appendChild(table);
+
+					if (game.results.length > 0)
+					{
+						game.results.forEach(function (result, index, array)
+						{
+							var childSection = createJudgeSection();
+
+							if (result.vote === "negative")
+							{
+								childSection.getElementsByTagName("input").item(1).checked = true;
+							}
+
+							childSection.querySelector("select[name='affirmativeConstructive']").value = result.affirmativeConstructive.toString();
+							childSection.querySelector("select[name='affirmativeQuestions']").value = result.affirmativeQuestions.toString();
+							childSection.querySelector("select[name='affirmativeAnswers']").value = result.affirmativeAnswers.toString();
+							childSection.querySelector("select[name='affirmativeRebuttal1']").value = result.affirmativeRebuttal1.toString();
+							childSection.querySelector("select[name='affirmativeRebuttal2']").value = result.affirmativeRebuttal2.toString();
+							childSection.querySelector("select[name='affirmativeManner']").value = result.affirmativeManner.toString();
+
+							childSection.querySelector("select[name='negativeConstructive']").value = result.negativeConstructive.toString();
+							childSection.querySelector("select[name='negativeQuestions']").value = result.negativeQuestions.toString();
+							childSection.querySelector("select[name='negativeAnswers']").value = result.negativeAnswers.toString();
+							childSection.querySelector("select[name='negativeRebuttal1']").value = result.negativeRebuttal1.toString();
+							childSection.querySelector("select[name='negativeRebuttal2']").value = result.negativeRebuttal2.toString();
+							childSection.querySelector("select[name='negativeManner']").value = result.negativeManner.toString();
+
+							section.appendChild(childSection);
+						});
+					}
+					else
+					{
+						section.appendChild(createJudgeSection());
+						section.appendChild(createJudgeSection());
+						section.appendChild(createJudgeSection());
+					}
+
+					var add = document.createElement("p");
+					add.setAttribute("class", "operation");
+					add.textContent = "＋　審判を追加　";
+					add.addEventListener("click", function ()
+					{
+						section.insertBefore(createJudgeSection(), add);
+						updateJudgesName();
+						calcVote();
+						calcCommPoint();
+					});
+					section.appendChild(add);
+
+					var button = document.createElement("input");
+					button.setAttribute("type", "button");
+					button.setAttribute("value", "保存");
+					button.addEventListener("click", function ()
+					{
+						var mask = document.createElement("div");
+						mask.style.height = "120%";
+						mask.style.left = "0";
+						mask.style.position = "fixed";
+						mask.style.top = "0";
+						mask.style.width = "100%";
+						document.body.appendChild(mask);
+
+						button.disabled = true;
+						message.textContent = "保存しています...";
+
+						saveResult(game.id, function (statusCode)
+						{
+							if (statusCode === 204)
+							{
+								document.body.removeChild(mask);
+
+								button.disabled = false;
+								message.textContent = "保存完了";
+							}
+							else
+							{
+								message.setAttribute("class", "error");
+								message.textContent = "保存に失敗しました";
+							}
+						});
+					});
+					section.appendChild(button);
+
+					var message = document.createElement("p");
+					section.appendChild(message);
+
+					popup.replaceChild(section, loading);
+
+					updateJudgesName();
+					calcVote();
+					calcCommPoint();
+
+					var close = document.createElement("p");
+					close.setAttribute("class", "operation");
+					close.textContent = "✕　閉じる　";
+					close.addEventListener("click", function ()
+					{
+						document.body.removeChild(popup);
+					});
+					popup.appendChild(close);
+					break;
+			}
+		});
+		xhr.open("GET", API_URL + "/" + window.sessionStorage.getItem("eventId") + "/games/" + gameId.toString());
+		xhr.setRequestHeader("Authorization", window.sessionStorage.getItem("token"));
+		xhr.send(null);
+	}
+
+	function saveResult(gameId, callback)
+	{
+		var request = {
+			results: []
+		};
+
+		var sections = document.querySelectorAll("section.lv3");
+		sections.forEach(function (section, index, array)
+		{
+			var result = {};
+
+			result.judgeName = section.getElementsByTagName("h2").item(0).textContent;
+			result.vote = section.getElementsByTagName("input").item(0).checked ? "affirmative" : "negative";
+
+			result.affirmativeConstructive = parseInt(section.querySelector("select[name='affirmativeConstructive']").value, 10);
+			result.affirmativeQuestions = parseInt(section.querySelector("select[name='affirmativeQuestions']").value, 10);
+			result.affirmativeAnswers = parseInt(section.querySelector("select[name='affirmativeAnswers']").value, 10);
+			result.affirmativeRebuttal1 = parseInt(section.querySelector("select[name='affirmativeRebuttal1']").value, 10);
+			result.affirmativeRebuttal2 = parseInt(section.querySelector("select[name='affirmativeRebuttal2']").value, 10);
+			result.affirmativeManner = parseInt(section.querySelector("select[name='affirmativeManner']").value, 10);
+
+			result.negativeConstructive = parseInt(section.querySelector("select[name='negativeConstructive']").value, 10);
+			result.negativeQuestions = parseInt(section.querySelector("select[name='negativeQuestions']").value, 10);
+			result.negativeAnswers = parseInt(section.querySelector("select[name='negativeAnswers']").value, 10);
+			result.negativeRebuttal1 = parseInt(section.querySelector("select[name='negativeRebuttal1']").value, 10);
+			result.negativeRebuttal2 = parseInt(section.querySelector("select[name='negativeRebuttal2']").value, 10);
+			result.negativeManner = parseInt(section.querySelector("select[name='negativeManner']").value, 10);
+
+			request.results.push(result);
+		});
+
+		var xhr = new XMLHttpRequest();
+		xhr.addEventListener("loadend", function ()
+		{
+			switch(xhr.status)
+			{
+				case 204:
+					showEvent(function ()
+					{
+						if (callback != null)
+						{
+							callback(xhr.status);
+						}
+					});
+					break;
+				default:
+					if (callback != null)
+					{
+						callback(xhr.status);
+					}	
+			}
+		});
+		xhr.open("PATCH", API_URL + "/" + window.sessionStorage.getItem("eventId") + "/games/" + gameId.toString());
+		xhr.setRequestHeader("Authorization", window.sessionStorage.getItem("token"));
+		xhr.send(JSON.stringify(request));
+	}
+
+	function createJudgeSection()
+	{
+		var section = document.createElement("section");
+		section.setAttribute("class", "lv3");
+		section.innerHTML = '\
+			<p class="delete" onclick="removeJudge(this);">✕</p>\
+			<h2></h2>\
+			<label><input type="radio" onclick="calcVote();" checked>肯定側の勝ち</label>\
+			<label><input type="radio" onclick="calcVote();">否定側の勝ち</label>\
+			<table>\
+				<tr>\
+					<td></td>\
+					<td>立論</td>\
+					<td>質疑</td>\
+					<td>応答</td>\
+					<td>一反</td>\
+					<td>二反</td>\
+					<td>マナー</td>\
+					<td>合計</td>\
+				</tr>\
+				<tr>\
+					<td>肯定</td>\
+					<td><select name="affirmativeConstructive" onchange="calcCommPoint();"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></td>\
+					<td><select name="affirmativeQuestions" onchange="calcCommPoint();"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></td>\
+					<td><select name="affirmativeAnswers" onchange="calcCommPoint();"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></td>\
+					<td><select name="affirmativeRebuttal1" onchange="calcCommPoint();"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></td>\
+					<td><select name="affirmativeRebuttal2" onchange="calcCommPoint();"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></td>\
+					<td><select name="affirmativeManner" onchange="calcCommPoint();"><option selected>0</option><option>-1</option><option>-2</option><option>-3</option><option>-4</option><option>-5</option></select></td>\
+					<td class="affirmativeSum"></td>\
+				</tr>\
+				<tr>\
+					<td>否定</td>\
+					<td><select name="negativeConstructive" onchange="calcCommPoint();"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></td>\
+					<td><select name="negativeQuestions" onchange="calcCommPoint();"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></td>\
+					<td><select name="negativeAnswers" onchange="calcCommPoint();"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></td>\
+					<td><select name="negativeRebuttal1" onchange="calcCommPoint();"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></td>\
+					<td><select name="negativeRebuttal2" onchange="calcCommPoint();"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></td>\
+					<td><select name="negativeManner" onchange="calcCommPoint();"><option selected>0</option><option>-1</option><option>-2</option><option>-3</option><option>-4</option><option>-5</option></select></td>\
+					<td class="negativeSum"></td>\
+				</tr>\
+			</table>';
+		return section;
+	}
+
+	function updateJudgesName()
+	{
+		var sections = document.querySelectorAll("section.lv3");
+		sections.forEach(function (section, index, array)
+		{
+			var title = section.getElementsByTagName("h2").item(0);
+			if (index === 0)
+			{
+				section.querySelector("p.delete").style.visibility = "hidden";
+				title.textContent = "主審";
+			}
+			else
+			{
+				title.textContent = "副審" + index.toString();
+			}
+
+			section.getElementsByTagName("input").item(0).setAttribute("name", "vote" + index.toString());
+			section.getElementsByTagName("input").item(1).setAttribute("name", "vote" + index.toString());
+		});
+	}
+
+	function removeJudge(x)
+	{
+		document.querySelector("section.popup section.lv2").removeChild(x.parentElement);
+		updateJudgesName();
+		calcVote();
+		calcCommPoint();
+	}
+
+	function calcVote()
+	{
+		var affirmativeVote = 0;
+		var negativeVote = 0;
+
+		var sections = document.querySelectorAll("section.lv3");
+		sections.forEach(function (section, index, array)
+		{
+			if (section.getElementsByTagName("input").item(0).checked)
+			{
+				affirmativeVote++;
+			}
+			else
+			{
+				negativeVote++;
+			}
+		});
+
+		document.getElementById("affirmativeVote").textContent = affirmativeVote.toString();
+		document.getElementById("negativeVote").textContent = negativeVote.toString();
+	}
+
+	function calcCommPoint()
+	{
+		var affirmativeCommPoint = 0;
+		var negativeCommPoint = 0;
+
+		var sections = document.querySelectorAll("section.lv3");
+		sections.forEach(function (section, index, array)
+		{
+			var affirmativeSum = 0;
+			var negativeSum = 0;
+
+			affirmativeSum += parseInt(section.querySelector("select[name='affirmativeConstructive']").value, 10);
+			affirmativeSum += parseInt(section.querySelector("select[name='affirmativeQuestions']").value, 10);
+			affirmativeSum += parseInt(section.querySelector("select[name='affirmativeAnswers']").value, 10);
+			affirmativeSum += parseInt(section.querySelector("select[name='affirmativeRebuttal1']").value, 10);
+			affirmativeSum += parseInt(section.querySelector("select[name='affirmativeRebuttal2']").value, 10);
+			affirmativeSum += parseInt(section.querySelector("select[name='affirmativeManner']").value, 10);
+
+			negativeSum += parseInt(section.querySelector("select[name='negativeConstructive']").value, 10);
+			negativeSum += parseInt(section.querySelector("select[name='negativeQuestions']").value, 10);
+			negativeSum += parseInt(section.querySelector("select[name='negativeAnswers']").value, 10);
+			negativeSum += parseInt(section.querySelector("select[name='negativeRebuttal1']").value, 10);
+			negativeSum += parseInt(section.querySelector("select[name='negativeRebuttal2']").value, 10);
+			negativeSum += parseInt(section.querySelector("select[name='negativeManner']").value, 10);
+
+			section.getElementsByClassName("affirmativeSum").item(0).textContent = affirmativeSum.toString();
+			section.getElementsByClassName("negativeSum").item(0).textContent = negativeSum.toString();
+
+			affirmativeCommPoint += affirmativeSum;
+			negativeCommPoint += negativeSum;
+		});
+
+		document.getElementById("affirmativeCommPoint").textContent = "(" + affirmativeCommPoint.toString() + ")";
+		document.getElementById("negativeCommPoint").textContent = "(" + negativeCommPoint.toString() + ")";
+	}
+
+</script>
+</head>
+<body>
+<h1>読み込み中...</h1>
+</body>
+</html>
