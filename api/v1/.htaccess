@@ -1,0 +1,3 @@
+ForceType fcgid-script
+
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
