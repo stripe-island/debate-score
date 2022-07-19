@@ -1,4 +1,3 @@
-#! /usr/bin/php-fcgi7.1
 <?php
 
 
@@ -9,8 +8,10 @@
     header("Content-Type: application/json; charset=utf-8");
     header("X-Content-Type-Options: nosniff");
 
+    $_SERVER["PATH_INFO"] = get_path_info();
+
     # /events
-    if (!$_SERVER["PATH_INFO"])
+    if (strcmp("events", $_SERVER["PATH_INFO"]) == 0)
     {
         switch ($_SERVER["REQUEST_METHOD"])
         {
@@ -62,7 +63,7 @@
     }
 
     # /events/:id
-    else if (preg_match("#^/(\d+)$#", $_SERVER["PATH_INFO"], $matches))
+    else if (preg_match("#^events/(\d+)$#", $_SERVER["PATH_INFO"], $matches))
     {
         switch ($_SERVER["REQUEST_METHOD"])
         {
@@ -236,7 +237,7 @@
     }
 
     # /events/:id/teams
-    else if (preg_match("#^/(\d+)/teams$#", $_SERVER["PATH_INFO"], $matches))
+    else if (preg_match("#^events/(\d+)/teams$#", $_SERVER["PATH_INFO"], $matches))
     {
         switch ($_SERVER["REQUEST_METHOD"])
         {
@@ -463,7 +464,7 @@
     }
 
     # /events/:id/games
-    else if (preg_match("#^/(\d+)/games$#", $_SERVER["PATH_INFO"], $matches))
+    else if (preg_match("#^events/(\d+)/games$#", $_SERVER["PATH_INFO"], $matches))
     {
         switch ($_SERVER["REQUEST_METHOD"])
         {
@@ -484,7 +485,7 @@
     }
 
     # /events/:id/games/:id
-    else if (preg_match("#^/(\d+)/games/(\d+)$#", $_SERVER["PATH_INFO"], $matches))
+    else if (preg_match("#^events/(\d+)/games/(\d+)$#", $_SERVER["PATH_INFO"], $matches))
     {
         switch ($_SERVER["REQUEST_METHOD"])
         {
@@ -935,5 +936,20 @@
         }
     }
 
+
+    function get_path_info()
+    {
+        if (array_key_exists("", $_SERVER))
+        {
+            return $_SERVER["PATH_INFO"];
+        }
+
+        $script_path = str_replace(basename($_SERVER["SCRIPT_NAME"]), "", $_SERVER["SCRIPT_NAME"]);
+        $path_info = str_replace($script_path, "", $_SERVER["REQUEST_URI"]);
+
+        $path_info = strtok($path_info, "?");
+
+        return $path_info;
+    }
 
 ?>

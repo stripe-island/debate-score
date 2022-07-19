@@ -1,3 +1,9 @@
-ForceType fcgid-script
+RewriteEngine On
+
+RewriteOptions inherit
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*) index.php
 
 RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
